@@ -7,8 +7,10 @@ Author:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math, copy
 
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.autograd import Variable
 from util import masked_softmax
 
 
@@ -102,6 +104,7 @@ class RNNEncoder(nn.Module):
         x = pack_padded_sequence(x, lengths, batch_first=True)
 
         # Apply RNN
+        self.rnn.flatten_parameters()   # haroldmei
         x, _ = self.rnn(x)  # (batch_size, seq_len, 2 * hidden_size)
 
         # Unpack and reverse sort
@@ -220,3 +223,207 @@ class BiDAFOutput(nn.Module):
         log_p2 = masked_softmax(logits_2.squeeze(), mask, log_softmax=True)
 
         return log_p1, log_p2
+
+"""
+CS224N course project model implementation: Transformer
+"""
+
+def clones(module, N):
+    "Produce N identical layers."
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
+
+def attention(query, key, value, mask=None, dropout=0.0):
+    "Compute 'Scaled Dot Product Attention'"
+    d_k = query.size(-1)
+    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, -1e9)
+    p_attn = F.softmax(scores, dim = -1)
+    # (Dropout described below)
+    p_attn = F.dropout(p_attn, p=dropout)
+    return torch.matmul(p_attn, value), p_attn
+
+class LayerNorm(nn.Module):
+    "Construct a layernorm module (See citation for details)."
+    def __init__(self, features, eps=1e-6):
+        super(LayerNorm, self).__init__()
+        self.a_2 = nn.Parameter(torch.ones(features))
+        self.b_2 = nn.Parameter(torch.zeros(features))
+        self.eps = eps
+
+    def forward(self, x):
+        mean = x.mean(-1, keepdim=True)
+        std = x.std(-1, keepdim=True)
+        return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
+        
+class SublayerConnection(nn.Module):
+    """
+    A residual connection followed by a layer norm.
+    Note for code simplicity we apply the norm first as opposed to last.
+    """
+    def __init__(self, size, dropout):
+        super(SublayerConnection, self).__init__()
+        self.norm = LayerNorm(size)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, sublayer):
+        "Apply residual connection to any sublayer function that maintains the same size."
+        return x + self.dropout(sublayer(self.norm(x)))
+
+
+class PositionwiseFeedForward(nn.Module):
+    "Implements FFN equation."
+    def __init__(self, d_model, d_ff, dropout=0.1):
+        super(PositionwiseFeedForward, self).__init__()
+        # Torch linears have a `b` by default. 
+        self.w_1 = nn.Linear(d_model, d_ff)
+        self.w_2 = nn.Linear(d_ff, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        return self.w_2(self.dropout(F.relu(self.w_1(x))))
+        
+class MultiHeadedAttention(nn.Module):
+    def __init__(self, h, d_model, dropout=0.1):
+        "Take in model size and number of heads."
+        super(MultiHeadedAttention, self).__init__()
+        assert d_model % h == 0
+        # We assume d_v always equals d_k
+        self.d_k = d_model // h
+        self.h = h
+        self.p = dropout
+        self.linears = clones(nn.Linear(d_model, d_model), 4)
+        self.attn = None
+        
+    def forward(self, query, key, value, mask=None):
+        "Implements Figure 2"
+        if mask is not None:
+            # Same mask applied to all h heads.
+            mask = mask.unsqueeze(1)
+        nbatches = query.size(0)
+        
+        # 1) Do all the linear projections in batch from d_model => h x d_k 
+        query, key, value = [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
+                             for l, x in zip(self.linears, (query, key, value))]
+        
+        # 2) Apply attention on all the projected vectors in batch. 
+        x, self.attn = attention(query, key, value, mask=mask, dropout=self.p)
+        
+        # 3) "Concat" using a view and apply a final linear. 
+        x = x.transpose(1, 2).contiguous().view(nbatches, -1, self.h * self.d_k)
+        return self.linears[-1](x)
+
+class PositionalEncoding(nn.Module):
+    "Implement the PE function."
+    def __init__(self, d_model, dropout, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) *
+                             -(math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+        
+    def forward(self, x):
+        x = x + Variable(self.pe[:, :x.size(1)], requires_grad=False)
+        return self.dropout(x)
+
+class EncoderLayer(nn.Module):
+    "Encoder is made up of two sublayers, self-attn and feed forward (defined below)"
+
+    # N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
+    def __init__(self, size=512, d_ff=2048, h=8, dropout=0.1):
+        super(EncoderLayer, self).__init__()
+        self.self_attn = MultiHeadedAttention(h, size, dropout)
+        self.feed_forward = PositionwiseFeedForward(size, d_ff, dropout)
+        self.sublayer = clones(SublayerConnection(size, dropout), 2)
+        self.size = size
+
+    def forward(self, x, mask):
+        "Follow Figure 1 (left) for connections."
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
+        return self.sublayer[1](x, self.feed_forward)
+
+class TransformerEncoder(nn.Module):
+    """
+    The transformer encoder part described in 'Attention is all you need'
+    """
+    def __init__(self, hidden_size, N = 6):
+        super(TransformerEncoder, self).__init__()
+        self.layer = EncoderLayer(size = hidden_size)
+        self.layers = clones(self.layer, N)
+        self.norm = LayerNorm(self.layer.size)
+
+    def forward(self, x, mask):
+        """
+        Pass the input (and mask) through each layer in turn.
+        """
+
+        # haroldmei
+        mask = torch.unsqueeze(mask, 1)
+
+        for layer in self.layers:
+            x = layer(x, mask)
+        return self.norm(x)
+
+
+# just copied from BiDAFOutput
+class Transformer_Output(nn.Module):
+    """Output layer used by BiDAF for question answering.
+
+    Computes a linear transformation of the attention and modeling
+    outputs, then takes the softmax of the result to get the start pointer.
+    A bidirectional LSTM is then applied the modeling output to produce `mod_2`.
+    A second linear+softmax of the attention output and `mod_2` is used
+    to get the end pointer.
+
+    Args:
+        hidden_size (int): Hidden size used in the BiDAF model.
+        drop_prob (float): Probability of zero-ing out activations.
+    """
+    def __init__(self, hidden_size, drop_prob, eight = 1, two = 1):
+        super(Transformer_Output, self).__init__()
+        self.att_linear_1 = nn.Linear(eight * hidden_size, 1)
+        self.mod_linear_1 = nn.Linear(two * hidden_size, 1)
+
+        self.rnn = RNNEncoder(input_size=two * hidden_size,
+                              hidden_size=hidden_size,
+                              num_layers=1,
+                              drop_prob=drop_prob)
+
+        self.att_linear_2 = nn.Linear(eight * hidden_size, 1)
+        self.mod_linear_2 = nn.Linear(2 * hidden_size, 1)
+
+    def forward(self, att, mod, mask):
+        # Shapes: (batch_size, seq_len, 1)
+        logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
+        mod_2 = self.rnn(mod, mask.sum(-1))
+        logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod_2)
+
+        # Shapes: (batch_size, seq_len)
+        log_p1 = masked_softmax(logits_1.squeeze(), mask, log_softmax=True)
+        log_p2 = masked_softmax(logits_2.squeeze(), mask, log_softmax=True)
+
+        return log_p1, log_p2
+
+
+"""
+CS224N course project model implementation: Reformer
+"""
+class ReformerEncoder(nn.Module):
+    """
+    The Reformer encoder part described in ''
+    """
+    def __init__(self):
+        super(ReformerEncoder, self).__init__()
+
+    def forward(self, x):
+        """
+        this is hard
+        """

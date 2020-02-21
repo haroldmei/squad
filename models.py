@@ -70,3 +70,51 @@ class BiDAF(nn.Module):
         out = self.out(att, mod, c_mask)  # 2 tensors, each (batch_size, c_len)
 
         return out
+
+
+class BiDAF_Transformer(nn.Module):
+    """
+    Use the similar framework as BiDAF but replace the attention mechanism from Transformer
+    """
+    
+    def __init__(self, word_vectors, hidden_size, drop_prob=0.):
+        super(BiDAF_Transformer, self).__init__()
+        self.emb = layers.Embedding(word_vectors=word_vectors,
+                                    hidden_size=hidden_size,
+                                    drop_prob=drop_prob)
+
+        self.pemb = layers.PositionalEncoding(hidden_size, drop_prob)
+
+        self.enc = layers.TransformerEncoder(hidden_size)
+
+        self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
+
+    def forward(self, cw_idxs, qw_idxs):
+        """
+        this is hard.
+        """
+        c_mask = torch.zeros_like(cw_idxs) != cw_idxs
+        c_emb = self.emb(cw_idxs)
+        c_emb = self.pemb(c_emb)
+        c_enc = self.enc(c_emb, c_mask)
+        
+        out = self.out(c_enc, c_enc, c_mask)  # 2 tensors, each (batch_size, c_len)
+        return out
+
+
+class BiDAF_Reformer(nn.Module):
+    """
+    Use the similar framework as BiDAF but replace tghe attention mechanism from Reformer
+    """
+
+    def __init__(self, word_vectors, hidden_size, drop_prob=0.):
+        super(BiDAF_Reformer, self).__init__()
+        self.emb = layers.Embedding(word_vectors=word_vectors,
+                                    hidden_size=hidden_size,
+                                    drop_prob=drop_prob)
+
+    def forward(self, cw_idxs, qw_idxs):
+        """
+        this is hard.
+        """
+        print("BiDAF_Reformer.forward")
