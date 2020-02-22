@@ -399,7 +399,7 @@ class Transformer_Output(nn.Module):
         # Shapes: (batch_size, seq_len, 1)
         logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
         #mod_2 = self.rnn(mod, mask.sum(-1))
-        logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod_2)
+        logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod)
 
         # Shapes: (batch_size, seq_len)
         log_p1 = masked_softmax(logits_1.squeeze(), mask, log_softmax=True)
