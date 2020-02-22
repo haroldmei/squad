@@ -387,23 +387,18 @@ class Transformer_Output(nn.Module):
         hidden_size (int): Hidden size used in the BiDAF model.
         drop_prob (float): Probability of zero-ing out activations.
     """
-    def __init__(self, hidden_size, drop_prob, eight = 1, two = 1):
+    def __init__(self, hidden_size, drop_prob):
         super(Transformer_Output, self).__init__()
-        self.att_linear_1 = nn.Linear(eight * hidden_size, 1)
-        self.mod_linear_1 = nn.Linear(two * hidden_size, 1)
+        self.att_linear_1 = nn.Linear(hidden_size, 1)
+        self.mod_linear_1 = nn.Linear(hidden_size, 1)
 
-        self.rnn = RNNEncoder(input_size=two * hidden_size,
-                              hidden_size=hidden_size,
-                              num_layers=1,
-                              drop_prob=drop_prob)
-
-        self.att_linear_2 = nn.Linear(eight * hidden_size, 1)
-        self.mod_linear_2 = nn.Linear(2 * hidden_size, 1)
+        self.att_linear_2 = nn.Linear(hidden_size, 1)
+        self.mod_linear_2 = nn.Linear(hidden_size, 1)
 
     def forward(self, att, mod, mask):
         # Shapes: (batch_size, seq_len, 1)
         logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
-        mod_2 = self.rnn(mod, mask.sum(-1))
+        #mod_2 = self.rnn(mod, mask.sum(-1))
         logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod_2)
 
         # Shapes: (batch_size, seq_len)
