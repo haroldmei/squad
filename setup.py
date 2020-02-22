@@ -306,7 +306,7 @@ def build_features(args, examples, data_type, out_file, word2idx_dict, char2idx_
             ques_idx[i] = _get_word(token)
         ques_idxs.append(ques_idx)
 
-        # put together both conttttext and question
+        # put together both context and question
         cq_idx = np.zeros([para_limit+ques_limit], dtype=np.int32)
         cq_idx[:para_limit] = context_idx
         cq_idx[context_len : context_len + ques_limit] = ques_idx

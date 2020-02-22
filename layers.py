@@ -375,30 +375,18 @@ class TransformerEncoder(nn.Module):
 
 # just copied from BiDAFOutput
 class Transformer_Output(nn.Module):
-    """Output layer used by BiDAF for question answering.
-
-    Computes a linear transformation of the attention and modeling
-    outputs, then takes the softmax of the result to get the start pointer.
-    A bidirectional LSTM is then applied the modeling output to produce `mod_2`.
-    A second linear+softmax of the attention output and `mod_2` is used
-    to get the end pointer.
-
-    Args:
-        hidden_size (int): Hidden size used in the BiDAF model.
-        drop_prob (float): Probability of zero-ing out activations.
+    """
     """
     def __init__(self, hidden_size, drop_prob):
         super(Transformer_Output, self).__init__()
-        self.att_linear_1 = nn.Linear(hidden_size, 1)
-        self.mod_linear_1 = nn.Linear(hidden_size, 1)
+        self.att_linear_1 = nn.Linear(4*hidden_size, 1)
+        self.mod_linear_1 = nn.Linear(4*hidden_size, 1)
 
-        self.att_linear_2 = nn.Linear(hidden_size, 1)
-        self.mod_linear_2 = nn.Linear(hidden_size, 1)
+        self.att_linear_2 = nn.Linear(4*hidden_size, 1)
+        self.mod_linear_2 = nn.Linear(4*hidden_size, 1)
 
     def forward(self, att, mod, mask):
-        # Shapes: (batch_size, seq_len, 1)
         logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
-        #mod_2 = self.rnn(mod, mask.sum(-1))
         logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod)
 
         # Shapes: (batch_size, seq_len)

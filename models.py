@@ -3,6 +3,7 @@
 Author:
     Chris Chute (chute@stanford.edu)
 """
+import util
 
 import layers
 import torch
@@ -79,13 +80,17 @@ class BiDAF_Transformer(nn.Module):
     
     def __init__(self, word_vectors, hidden_size, drop_prob=0.):
         super(BiDAF_Transformer, self).__init__()
-        self.emb = layers.Embedding(word_vectors=word_vectors,
-                                    hidden_size=hidden_size,
-                                    drop_prob=drop_prob)
+        self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
+
+        self.device, _ = util.get_available_devices()
 
         self.pemb = layers.PositionalEncoding(hidden_size, drop_prob)
 
         self.enc = layers.TransformerEncoder(hidden_size)
+
+        self.att = layers.BiDAFAttention(hidden_size=hidden_size, drop_prob=drop_prob)      # for test, from bidaf
+
+        self.mod = layers.TransformerEncoder(4 * hidden_size)
 
         self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
 
@@ -93,13 +98,29 @@ class BiDAF_Transformer(nn.Module):
         """
         this is hard.
         """
-        c_mask = torch.zeros_like(cq_idxs) != cq_idxs
-        c_emb = self.emb(cq_idxs)
-        c_emb = self.pemb(c_emb)
-        c_enc = self.enc(c_emb, c_mask)
-        c_enc_1 = self.enc(c_enc, c_mask)
-        
-        out = self.out(c_enc, c_enc_1, c_mask)  # 2 tensors, each (batch_size, c_len)
+        #cq_mask = torch.zeros_like(cq_idxs) != cq_idxs
+        #zeros = torch.zeros(cq_idxs.shape, dtype=torch.int64)
+        #zeros = zeros.to(self.device)
+        #zeros[:,:cw_idxs.shape[1]] = cw_idxs
+        #c_mask_ = torch.zeros_like(zeros) != zeros
+
+        c_mask = torch.zeros_like(cw_idxs) != cw_idxs
+        q_mask = torch.zeros_like(qw_idxs) != qw_idxs
+        c_len, q_len = c_mask.sum(-1), q_mask.sum(-1)
+
+        c_emb = self.emb(cw_idxs)        
+        q_emb = self.emb(qw_idxs)        
+
+        c_enc = self.enc(c_emb, c_mask)   
+        q_enc = self.enc(q_emb, q_mask)   
+
+        att = self.att(c_enc, q_enc, c_mask, q_mask)    
+        #print(att.shape, c_enc.shape)
+
+        mod = self.mod(att, c_mask)    
+
+        out = self.out(att, mod, c_mask)  
+
         return out
 
 
