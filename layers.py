@@ -338,17 +338,28 @@ class EncoderLayer(nn.Module):
     "Encoder is made up of two sublayers, self-attn and feed forward (defined below)"
 
     # N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
-    def __init__(self, size=512, d_ff=2048, h=8, dropout=0.1):
+    def __init__(self, size=512, d_ff=2048, h=8, dropout=0.1, kernel = 7):
         super(EncoderLayer, self).__init__()
+
+        self.conv1d = \
+            nn.Sequential(
+                # input: batch * emb_char * max_words
+                # output: batch * emb_word * (max_words - kernel + 1)
+                nn.Conv1d(size, size, kernel, bias=True, padding=kernel//2),
+                nn.ReLU(),
+                #nn.MaxPool1d(self.max_words - self.kernel + 1)
+            )
+            
         self.self_attn = MultiHeadedAttention(h, size, dropout)
         self.feed_forward = PositionwiseFeedForward(size, d_ff, dropout)
-        self.sublayer = clones(SublayerConnection(size, dropout), 2)
+        self.sublayer = clones(SublayerConnection(size, dropout), 3)
         self.size = size
 
     def forward(self, x, mask):
         "Follow Figure 1 (left) for connections."
-        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
-        return self.sublayer[1](x, self.feed_forward)
+        x = self.sublayer[0](x, self.conv1d)
+        x = self.sublayer[1](x, lambda x: self.self_attn(x, x, x, mask))
+        return self.sublayer[2](x, self.feed_forward)
 
 class TransformerEncoder(nn.Module):
     """
