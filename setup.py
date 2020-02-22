@@ -265,6 +265,7 @@ def build_features(args, examples, data_type, out_file, word2idx_dict, char2idx_
     total_ = 0
     meta = {}
     context_idxs = []
+    cq_idxs = []
     context_char_idxs = []
     ques_idxs = []
     ques_char_idxs = []
@@ -295,13 +296,21 @@ def build_features(args, examples, data_type, out_file, word2idx_dict, char2idx_
         ques_idx = np.zeros([ques_limit], dtype=np.int32)
         ques_char_idx = np.zeros([ques_limit, char_limit], dtype=np.int32)
 
+        context_len = 0
         for i, token in enumerate(example["context_tokens"]):
             context_idx[i] = _get_word(token)
+            context_len += 1
         context_idxs.append(context_idx)
 
         for i, token in enumerate(example["ques_tokens"]):
             ques_idx[i] = _get_word(token)
         ques_idxs.append(ques_idx)
+
+        # put together both conttttext and question
+        cq_idx = np.zeros([para_limit+ques_limit], dtype=np.int32)
+        cq_idx[:para_limit] = context_idx
+        cq_idx[context_len : context_len + ques_limit] = ques_idx
+        cq_idxs.append(cq_idx)
 
         for i, token in enumerate(example["context_chars"]):
             for j, char in enumerate(token):
@@ -328,6 +337,7 @@ def build_features(args, examples, data_type, out_file, word2idx_dict, char2idx_
 
     np.savez(out_file,
              context_idxs=np.array(context_idxs),
+             cq_idxs=np.array(cq_idxs),
              context_char_idxs=np.array(context_char_idxs),
              ques_idxs=np.array(ques_idxs),
              ques_char_idxs=np.array(ques_char_idxs),

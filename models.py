@@ -51,7 +51,7 @@ class BiDAF(nn.Module):
         self.out = layers.BiDAFOutput(hidden_size=hidden_size,
                                       drop_prob=drop_prob)
 
-    def forward(self, cw_idxs, qw_idxs):
+    def forward(self, cw_idxs, qw_idxs, cq_idxs):
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
         c_len, q_len = c_mask.sum(-1), q_mask.sum(-1)
@@ -89,16 +89,18 @@ class BiDAF_Transformer(nn.Module):
 
         self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
 
-    def forward(self, cw_idxs, qw_idxs):
+    def forward(self, cw_idxs, qw_idxs, cq_idxs):
         """
         this is hard.
         """
-        c_mask = torch.zeros_like(cw_idxs) != cw_idxs
-        c_emb = self.emb(cw_idxs)
+        print("======", cw_idxs[0], qw_idxs[0], cq_idxs[0])
+        c_mask = torch.zeros_like(cq_idxs) != cq_idxs
+        c_emb = self.emb(cq_idxs)
         c_emb = self.pemb(c_emb)
         c_enc = self.enc(c_emb, c_mask)
+        c_enc_1 = self.enc(c_enc, c_mask)
         
-        out = self.out(c_enc, c_enc, c_mask)  # 2 tensors, each (batch_size, c_len)
+        out = self.out(c_enc, c_enc_1, c_mask)  # 2 tensors, each (batch_size, c_len)
         return out
 
 
@@ -113,7 +115,7 @@ class BiDAF_Reformer(nn.Module):
                                     hidden_size=hidden_size,
                                     drop_prob=drop_prob)
 
-    def forward(self, cw_idxs, qw_idxs):
+    def forward(self, cw_idxs, qw_idxs, cq_idxs):
         """
         this is hard.
         """

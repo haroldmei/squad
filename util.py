@@ -46,6 +46,7 @@ class SQuAD(data.Dataset):
 
         dataset = np.load(data_path)
         self.context_idxs = torch.from_numpy(dataset['context_idxs']).long()
+        self.cq_idxs = torch.from_numpy(dataset['cq_idxs']).long()
         self.context_char_idxs = torch.from_numpy(dataset['context_char_idxs']).long()
         self.question_idxs = torch.from_numpy(dataset['ques_idxs']).long()
         self.question_char_idxs = torch.from_numpy(dataset['ques_char_idxs']).long()
@@ -57,6 +58,7 @@ class SQuAD(data.Dataset):
             batch_size, c_len, w_len = self.context_char_idxs.size()
             ones = torch.ones((batch_size, 1), dtype=torch.int64)
             self.context_idxs = torch.cat((ones, self.context_idxs), dim=1)
+            self.cq_idxs = torch.cat((ones, self.cq_idxs), dim = 1)
             self.question_idxs = torch.cat((ones, self.question_idxs), dim=1)
 
             ones = torch.ones((batch_size, 1, w_len), dtype=torch.int64)
@@ -74,6 +76,7 @@ class SQuAD(data.Dataset):
     def __getitem__(self, idx):
         idx = self.valid_idxs[idx]
         example = (self.context_idxs[idx],
+                   self.cq_idxs, 
                    self.context_char_idxs[idx],
                    self.question_idxs[idx],
                    self.question_char_idxs[idx],
@@ -125,12 +128,13 @@ def collate_fn(examples):
         return padded
 
     # Group by tensor type
-    context_idxs, context_char_idxs, \
+    context_idxs, cq_idxs, context_char_idxs, \
         question_idxs, question_char_idxs, \
         y1s, y2s, ids = zip(*examples)
 
     # Merge into batch tensors
     context_idxs = merge_1d(context_idxs)
+    cq_idxs = merge_1d(cq_idxs)
     context_char_idxs = merge_2d(context_char_idxs)
     question_idxs = merge_1d(question_idxs)
     question_char_idxs = merge_2d(question_char_idxs)
