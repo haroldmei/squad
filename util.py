@@ -76,7 +76,7 @@ class SQuAD(data.Dataset):
     def __getitem__(self, idx):
         idx = self.valid_idxs[idx]
         example = (self.context_idxs[idx],
-                   self.cq_idxs, 
+                   self.cq_idxs[idx], 
                    self.context_char_idxs[idx],
                    self.question_idxs[idx],
                    self.question_char_idxs[idx],
@@ -142,7 +142,7 @@ def collate_fn(examples):
     y2s = merge_0d(y2s)
     ids = merge_0d(ids)
 
-    return (context_idxs, context_char_idxs,
+    return (context_idxs, cq_idxs, context_char_idxs,
             question_idxs, question_char_idxs,
             y1s, y2s, ids)
 
