@@ -93,7 +93,6 @@ class BiDAF_Transformer(nn.Module):
         """
         this is hard.
         """
-        print("======", cw_idxs[0], qw_idxs[0], cq_idxs[0])
         c_mask = torch.zeros_like(cq_idxs) != cq_idxs
         c_emb = self.emb(cq_idxs)
         c_emb = self.pemb(c_emb)
