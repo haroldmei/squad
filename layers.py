@@ -354,7 +354,7 @@ class TransformerEncoder(nn.Module):
     """
     The transformer encoder part described in 'Attention is all you need'
     """
-    def __init__(self, hidden_size, N = 6):
+    def __init__(self, hidden_size, N = 3):
         super(TransformerEncoder, self).__init__()
         self.layer = EncoderLayer(size = hidden_size)
         self.layers = clones(self.layer, N)
