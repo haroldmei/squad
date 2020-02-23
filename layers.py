@@ -335,18 +335,23 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class EncoderLayer(nn.Module):
-    "Encoder is made up of two sublayers, self-attn and feed forward (defined below)"
+    """
+    Encoder is made up of two sublayers, self-attn and feed forward (defined below)
+    b blocks of cnn sublayers, each with c Conv1d 
+    """
 
     # N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
-    def __init__(self, size=512, d_ff=2048, h=8, dropout=0.1, kernel = 7):
+    def __init__(self, size=512, d_ff=2048, h=8, dropout=0.1, kernel = 7, b = 1, c = 4):
         super(EncoderLayer, self).__init__()
-
+        self.b = b
+        self.c = c
+        
         self.conv1d = \
             nn.Sequential(
                 # input: batch * emb_char * max_words
                 # output: batch * emb_word * (max_words - kernel + 1)
                 nn.Conv1d(size, size, kernel, bias=True, padding=kernel//2),
-                nn.ReLU(),
+                nn.ReLU()
                 #nn.MaxPool1d(self.max_words - self.kernel + 1)
             )
             
@@ -357,17 +362,23 @@ class EncoderLayer(nn.Module):
 
     def forward(self, x, mask):
         "Follow Figure 1 (left) for connections."
-        x = self.sublayer[0](x, self.conv1d)
+
+        for _ in range(self.b):
+            for _ in range(self.c):
+                x = self.conv1d(x.transpose(1,2)).transpose(1,2)
+            x = self.sublayer[0](x, lambda x: x)
+        
         x = self.sublayer[1](x, lambda x: self.self_attn(x, x, x, mask))
         return self.sublayer[2](x, self.feed_forward)
 
 class TransformerEncoder(nn.Module):
     """
     The transformer encoder part described in 'Attention is all you need'
+    b blocks of cnn sublayers, each with c Conv1d 
     """
-    def __init__(self, hidden_size, N = 3):
+    def __init__(self, hidden_size, N = 1, b = 1, c = 4):
         super(TransformerEncoder, self).__init__()
-        self.layer = EncoderLayer(size = hidden_size)
+        self.layer = EncoderLayer(size = hidden_size, b = b, c = c)
         self.layers = clones(self.layer, N)
         self.norm = LayerNorm(self.layer.size)
 
