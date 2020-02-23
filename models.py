@@ -87,13 +87,13 @@ class BiDAF_Transformer(nn.Module):
 
         self.pemb = layers.PositionalEncoding(hidden_size, drop_prob)
 
-        self.enc = layers.TransformerEncoder(hidden_size, N = 1)    # b = 1, c = 4
+        self.enc = layers.TransformerEncoder(hidden_size, N = 1)    # c = 4
 
         self.att = layers.BiDAFAttention(hidden_size=hidden_size, drop_prob=drop_prob)      # for test, from bidaf
 
         self.W = nn.Linear(4*hidden_size, hidden_size)
 
-        self.m0 = layers.TransformerEncoder(hidden_size, b = 3, c = 2)
+        self.m0 = layers.TransformerEncoder(hidden_size, N=7, c = 2)
 
         self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
 
@@ -121,8 +121,8 @@ class BiDAF_Transformer(nn.Module):
         mod = self.W(att)
         mod0 = self.m0(mod, c_mask)    
         mod1 = self.m0(mod0, c_mask)    
-
-        out = self.out(att, mod0, mod1, c_mask)  
+        mod2 = self.m0(mod1, c_mask)    
+        out = self.out(mod0, mod1, mod2, c_mask)  
 
         return out
 

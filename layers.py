@@ -342,12 +342,14 @@ class EncoderLayer(nn.Module):
     """
 
     # N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
-    def __init__(self, size=512, d_ff=2048, h=8, dropout=0.1, kernel = 7, b = 1, c = 4):
+    def __init__(self, size=512, d_ff=2048, h=8, dropout=0.1, kernel = 7, c = 4):
         super(EncoderLayer, self).__init__()
-        self.b = b
         self.c = c
         
-        self.conv1d = nn.Conv1d(size, size, kernel, bias=True, padding=kernel//2)
+        self.conv1d = nn.Sequential(
+            nn.Conv1d(size, size, kernel, bias=True, padding=kernel//2),
+            nn.ReLU()
+        )
             
         self.self_attn = MultiHeadedAttention(h, size, dropout)
         self.feed_forward = PositionwiseFeedForward(size, d_ff, dropout)
@@ -357,9 +359,11 @@ class EncoderLayer(nn.Module):
     def forward(self, x, mask):
         "Follow Figure 1 (left) for connections."
 
-        for _ in range(self.b):
-            for _ in range(self.c):
-                x = self.conv1d(x.transpose(1,2)).transpose(1,2)
+        # convolution
+        for _ in range(self.c):
+            x = self.conv1d(x.transpose(1,2))
+            #x = torch.max(x, dim=2)
+            x = x.transpose(1,2)
             x = self.sublayer[0](x, lambda x: x)
         
         x = self.sublayer[1](x, lambda x: self.self_attn(x, x, x, mask))
@@ -370,9 +374,9 @@ class TransformerEncoder(nn.Module):
     The transformer encoder part described in 'Attention is all you need'
     b blocks of cnn sublayers, each with c Conv1d 
     """
-    def __init__(self, hidden_size, N = 1, b = 1, c = 4):
+    def __init__(self, hidden_size, N = 1, c = 4):
         super(TransformerEncoder, self).__init__()
-        self.layer = EncoderLayer(size = hidden_size, b = b, c = c)
+        self.layer = EncoderLayer(size = hidden_size, c = c)
         self.layers = clones(self.layer, N)
         self.norm = LayerNorm(self.layer.size)
 
@@ -395,10 +399,10 @@ class Transformer_Output(nn.Module):
     """
     def __init__(self, hidden_size, drop_prob):
         super(Transformer_Output, self).__init__()
-        self.att_linear_1 = nn.Linear(4 * hidden_size, 1)
+        self.att_linear_1 = nn.Linear(hidden_size, 1)
         self.mod_linear_1 = nn.Linear(hidden_size, 1)
 
-        self.att_linear_2 = nn.Linear(4 * hidden_size, 1)
+        self.att_linear_2 = nn.Linear(hidden_size, 1)
         self.mod_linear_2 = nn.Linear(hidden_size, 1)
 
     def forward(self, att, mod0, mod1, mask):
