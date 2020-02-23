@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math, copy
+import reformer
 
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.autograd import Variable
@@ -346,14 +347,7 @@ class EncoderLayer(nn.Module):
         self.b = b
         self.c = c
         
-        self.conv1d = \
-            nn.Sequential(
-                # input: batch * emb_char * max_words
-                # output: batch * emb_word * (max_words - kernel + 1)
-                nn.Conv1d(size, size, kernel, bias=True, padding=kernel//2),
-                nn.ReLU()
-                #nn.MaxPool1d(self.max_words - self.kernel + 1)
-            )
+        self.conv1d = nn.Conv1d(size, size, kernel, bias=True, padding=kernel//2)
             
         self.self_attn = MultiHeadedAttention(h, size, dropout)
         self.feed_forward = PositionwiseFeedForward(size, d_ff, dropout)
@@ -401,15 +395,15 @@ class Transformer_Output(nn.Module):
     """
     def __init__(self, hidden_size, drop_prob):
         super(Transformer_Output, self).__init__()
-        self.att_linear_1 = nn.Linear(4*hidden_size, 1)
-        self.mod_linear_1 = nn.Linear(4*hidden_size, 1)
+        self.att_linear_1 = nn.Linear(4 * hidden_size, 1)
+        self.mod_linear_1 = nn.Linear(hidden_size, 1)
 
-        self.att_linear_2 = nn.Linear(4*hidden_size, 1)
-        self.mod_linear_2 = nn.Linear(4*hidden_size, 1)
+        self.att_linear_2 = nn.Linear(4 * hidden_size, 1)
+        self.mod_linear_2 = nn.Linear(hidden_size, 1)
 
-    def forward(self, att, mod, mask):
-        logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
-        logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod)
+    def forward(self, att, mod0, mod1, mask):
+        logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod0)
+        logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod1)
 
         # Shapes: (batch_size, seq_len)
         log_p1 = masked_softmax(logits_1.squeeze(), mask, log_softmax=True)
@@ -425,10 +419,17 @@ class ReformerEncoder(nn.Module):
     """
     The Reformer encoder part described in ''
     """
-    def __init__(self):
+    def __init__(self, hidden_size, drop_prob, max_seq_len=8192):
         super(ReformerEncoder, self).__init__()
+        self.reformer = reformer.Reformer(
+            dim = hidden_size,
+            depth = 12,
+            max_seq_len = max_seq_len,
+            heads = 8,
+            lsh_dropout = drop_prob,
+            causal = True
+        ).cuda()
 
-    def forward(self, x):
-        """
-        this is hard
-        """
+    def forward(self, x, mask):
+        x = self.reformer(x)
+        return x

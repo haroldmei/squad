@@ -80,9 +80,10 @@ class BiDAF_Transformer(nn.Module):
     
     def __init__(self, word_vectors, hidden_size, drop_prob=0.):
         super(BiDAF_Transformer, self).__init__()
-        self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
 
         self.device, _ = util.get_available_devices()
+
+        self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
 
         self.pemb = layers.PositionalEncoding(hidden_size, drop_prob)
 
@@ -90,7 +91,9 @@ class BiDAF_Transformer(nn.Module):
 
         self.att = layers.BiDAFAttention(hidden_size=hidden_size, drop_prob=drop_prob)      # for test, from bidaf
 
-        self.mod = layers.TransformerEncoder(4 * hidden_size, b = 7, c = 2) 
+        self.W = nn.Linear(4*hidden_size, hidden_size)
+
+        self.m0 = layers.TransformerEncoder(hidden_size, b = 3, c = 2)
 
         self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
 
@@ -106,7 +109,6 @@ class BiDAF_Transformer(nn.Module):
 
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
-        c_len, q_len = c_mask.sum(-1), q_mask.sum(-1)
 
         c_emb = self.emb(cw_idxs)        
         q_emb = self.emb(qw_idxs)        
@@ -114,12 +116,13 @@ class BiDAF_Transformer(nn.Module):
         c_enc = self.enc(c_emb, c_mask)   
         q_enc = self.enc(q_emb, q_mask)   
 
-        att = self.att(c_enc, q_enc, c_mask, q_mask)    
-        #print(att.shape, c_enc.shape)
+        att = self.att(c_enc, q_enc, c_mask, q_mask)    # 4 * hidden_size
 
-        mod = self.mod(att, c_mask)    
+        mod = self.W(att)
+        mod0 = self.m0(mod, c_mask)    
+        mod1 = self.m0(mod0, c_mask)    
 
-        out = self.out(att, mod, c_mask)  
+        out = self.out(att, mod0, mod1, c_mask)  
 
         return out
 
