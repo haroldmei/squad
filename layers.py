@@ -423,7 +423,7 @@ class ReformerEncoder(nn.Module):
     """
     The Reformer encoder part described in ''
     """
-    def __init__(self, hidden_size, drop_prob, max_seq_len=8192):
+    def __init__(self, hidden_size, drop_prob=0.1, max_seq_len=8192):
         super(ReformerEncoder, self).__init__()
         self.reformer = reformer.Reformer(
             dim = hidden_size,

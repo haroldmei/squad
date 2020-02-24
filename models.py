@@ -78,7 +78,7 @@ class BiDAF_Transformer(nn.Module):
     Use the similar framework as BiDAF but replace the attention mechanism from Transformer
     """
     
-    def __init__(self, word_vectors, hidden_size, drop_prob=0.):
+    def __init__(self, word_vectors, hidden_size, drop_prob=0.1):
         super(BiDAF_Transformer, self).__init__()
 
         self.device, _ = util.get_available_devices()
@@ -132,14 +132,44 @@ class BiDAF_Reformer(nn.Module):
     Use the similar framework as BiDAF but replace tghe attention mechanism from Reformer
     """
 
-    def __init__(self, word_vectors, hidden_size, drop_prob=0.):
+    def __init__(self, word_vectors, hidden_size, drop_prob=0.1):
         super(BiDAF_Reformer, self).__init__()
-        self.emb = layers.Embedding(word_vectors=word_vectors,
-                                    hidden_size=hidden_size,
-                                    drop_prob=drop_prob)
+        self.device, _ = util.get_available_devices()
+
+        self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
+
+        self.pemb = layers.PositionalEncoding(hidden_size, drop_prob)
+
+        self.enc = layers.ReformerEncoder(hidden_size)    # c = 4
+
+        self.att = layers.BiDAFAttention(hidden_size=hidden_size, drop_prob=drop_prob)      # for test, from bidaf
+
+        self.W = nn.Linear(4*hidden_size, hidden_size)
+
+        self.m0 = layers.ReformerEncoder(hidden_size) 
+
+        self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
 
     def forward(self, cw_idxs, qw_idxs, cq_idxs):
         """
         this is hard.
         """
-        print("BiDAF_Reformer.forward")
+
+        c_mask = torch.zeros_like(cw_idxs) != cw_idxs
+        q_mask = torch.zeros_like(qw_idxs) != qw_idxs
+
+        c_emb = self.emb(cw_idxs)        
+        q_emb = self.emb(qw_idxs)        
+
+        c_enc = self.enc(c_emb, c_mask)   
+        q_enc = self.enc(q_emb, q_mask)   
+
+        att = self.att(c_enc, q_enc, c_mask, q_mask)    # 4 * hidden_size
+
+        mod = self.W(att)
+        mod0 = self.m0(mod, c_mask)    
+        mod1 = self.m0(mod0, c_mask)    
+        mod2 = self.m0(mod1, c_mask)    
+        out = self.out(mod0, mod1, mod2, c_mask)  
+        
+        return out
