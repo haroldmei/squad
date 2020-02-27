@@ -8,7 +8,11 @@ import util
 import layers
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
+import transformer as transformer
+import reformer as reformer
+import qanet as qanet
+#from qanet import Embedding, EncoderBlock, CQAttention, Initialized_Conv1d, Pointer
 
 class BiDAF(nn.Module):
     """Baseline BiDAF model for SQuAD.
@@ -80,22 +84,14 @@ class BiDAF_Transformer(nn.Module):
     
     def __init__(self, word_vectors, hidden_size, drop_prob=0.1):
         super(BiDAF_Transformer, self).__init__()
-
         self.device, _ = util.get_available_devices()
-
         self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
-
-        self.pemb = layers.PositionalEncoding(hidden_size, drop_prob)
-
-        self.enc = layers.TransformerEncoder(hidden_size, N = 1)    # c = 4
-
+        self.pemb = transformer.PositionalEncoding(hidden_size, drop_prob)
+        self.enc = transformer.TransformerEncoder(hidden_size, N = 1)    # c = 4
         self.att = layers.BiDAFAttention(hidden_size=hidden_size, drop_prob=drop_prob)      # for test, from bidaf
-
         self.W = nn.Linear(4*hidden_size, hidden_size)
-
-        self.m0 = layers.TransformerEncoder(hidden_size, N=7, c = 2)
-
-        self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
+        self.mod = transformer.TransformerEncoder(hidden_size, N=3, c = 2)
+        self.out = transformer.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
 
     def forward(self, cw_idxs, qw_idxs, cq_idxs):
         """
@@ -117,59 +113,157 @@ class BiDAF_Transformer(nn.Module):
         q_enc = self.enc(q_emb, q_mask)   
 
         att = self.att(c_enc, q_enc, c_mask, q_mask)    # 4 * hidden_size
-
-        mod = self.W(att)
-        mod0 = self.m0(mod, c_mask)    
-        mod1 = self.m0(mod0, c_mask)    
-        mod2 = self.m0(mod1, c_mask)    
-        out = self.out(mod0, mod1, mod2, c_mask)  
+        mod = self.mod(self.W(att), c_mask)    
+        out = self.out(att, mod, c_mask)  
+        print(out[0].shape, out[1].shape)
 
         return out
 
+        
 
-class BiDAF_Reformer(nn.Module):
+class BiDAF_Transformer_Ex(nn.Module):
     """
-    Use the similar framework as BiDAF but replace tghe attention mechanism from Reformer
+    Use the similar framework as BiDAF but replace the attention mechanism from Transformer
     """
-
-    def __init__(self, word_vectors, hidden_size, drop_prob=0.1):
-        super(BiDAF_Reformer, self).__init__()
+    
+    def __init__(self, word_vectors, hidden_size, enc_layers=1, mod_layers = 3, kernel = 7, drop_prob=0.1):
+        super(BiDAF_Transformer_Ex, self).__init__()
         self.device, _ = util.get_available_devices()
-
         self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
-
-        self.pemb = layers.PositionalEncoding(hidden_size, drop_prob)
-
-        self.enc = layers.ReformerEncoder(hidden_size)    # c = 4
+        self.pemb = transformer.PositionalEncoding(hidden_size, drop_prob)
+        self.cnn1 = transformer.TransformerEncoderLayerEx(hidden_size)
+        self.enc = nn.modules.transformer.TransformerEncoder(
+            nn.modules.transformer.TransformerEncoderLayer(hidden_size, 8, dropout=drop_prob), 
+            enc_layers, 
+            nn.modules.transformer.LayerNorm(hidden_size)
+        )
 
         self.att = layers.BiDAFAttention(hidden_size=hidden_size, drop_prob=drop_prob)      # for test, from bidaf
-
         self.W = nn.Linear(4*hidden_size, hidden_size)
-
-        self.m0 = layers.ReformerEncoder(hidden_size) 
-
-        self.out = layers.Transformer_Output(hidden_size=hidden_size, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
+        self.cnn2 = transformer.TransformerEncoderLayerEx(hidden_size, c=2)
+        self.mod = nn.modules.transformer.TransformerEncoder(
+            nn.modules.transformer.TransformerEncoderLayer(hidden_size, 8, dropout=drop_prob), 
+            mod_layers, 
+            nn.modules.transformer.LayerNorm(hidden_size)
+        )
+        self.out = transformer.Transformer_OutputEx(hidden_size=hidden_size, mod_layers = mod_layers, drop_prob=drop_prob)    # just want to run, don't think it will do anything.
 
     def forward(self, cw_idxs, qw_idxs, cq_idxs):
-        """
-        this is hard.
-        """
-
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
 
-        c_emb = self.emb(cw_idxs)        
+        c_emb = self.emb(cw_idxs)
         q_emb = self.emb(qw_idxs)        
 
-        c_enc = self.enc(c_emb, c_mask)   
-        q_enc = self.enc(q_emb, q_mask)   
+        c_enc = self.enc(self.cnn1(c_emb)) #, c_mask)   
+        q_enc = self.enc(self.cnn1(q_emb)) #, q_mask)   
 
         att = self.att(c_enc, q_enc, c_mask, q_mask)    # 4 * hidden_size
+        mod = self.mod(self.cnn2(self.W(att)))#, c_mask)    
+        out = self.out(att, mod, c_mask)  
 
-        mod = self.W(att)
-        mod0 = self.m0(mod, c_mask)    
-        mod1 = self.m0(mod0, c_mask)    
-        mod2 = self.m0(mod1, c_mask)    
-        out = self.out(mod0, mod1, mod2, c_mask)  
-        
         return out
+
+class BiDAF_QANet(nn.Module):
+    def __init__(self, word_vectors, hidden_size, drop_prob=0.1):
+        super().__init__()
+        self.dropout = drop_prob
+        self.device, _ = util.get_available_devices()
+        self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
+        
+        self.emb_enc = qanet.EncoderBlock(conv_num=4, ch_num=hidden_size, k=7, dropout=drop_prob)
+        self.cq_att = qanet.CQAttention(hidden_size)
+        self.cq_resizer = qanet.Initialized_Conv1d(hidden_size * 4, hidden_size)
+        self.model_enc_blks = nn.ModuleList([qanet.EncoderBlock(conv_num=2, ch_num=hidden_size, k=5, dropout=drop_prob) for _ in range(7)])
+        self.out = qanet.Pointer(hidden_size)
+
+    def forward(self, Cwid, Qwid, CQid):
+        maskC = (torch.zeros_like(Cwid) != Cwid).float()
+        maskQ = (torch.zeros_like(Qwid) != Qwid).float()
+        
+        C, Q = self.emb(Cwid).transpose(1,2), self.emb(Qwid).transpose(1,2)
+        #print("3", C.shape, Q.shape)
+
+        Ce = self.emb_enc(C, maskC, 1, 1)
+        Qe = self.emb_enc(Q, maskQ, 1, 1)
+        
+        X = self.cq_att(Ce, Qe, maskC, maskQ)
+        M0 = self.cq_resizer(X)
+        M0 = F.dropout(M0, p=self.dropout, training=self.training)
+        for i, blk in enumerate(self.model_enc_blks):
+             M0 = blk(M0, maskC, i*(2+2)+1, 7)
+        M1 = M0
+        for i, blk in enumerate(self.model_enc_blks):
+             M0 = blk(M0, maskC, i*(2+2)+1, 7)
+        M2 = M0
+        M0 = F.dropout(M0, p=self.dropout, training=self.training)
+        for i, blk in enumerate(self.model_enc_blks):
+             M0 = blk(M0, maskC, i*(2+2)+1, 7)
+        M3 = M0
+        p1, p2 = self.out(M1, M2, M3, maskC) # b, d, l
+        
+        return p1, p2
+
+
+class BiDAF_Reformer(nn.Module):
+    def __init__(self, word_vectors, hidden_size, drop_prob=0.1):
+        super().__init__()
+        self.dropout = drop_prob
+        self.device, _ = util.get_available_devices()
+        self.emb = layers.Embedding(word_vectors=word_vectors, hidden_size=hidden_size, drop_prob=drop_prob)
+        
+        self.emb_enc = reformer.Reformer(
+                                            dim = hidden_size,
+                                            depth = 1,
+                                            conv=4,
+                                            kernel=7,
+                                            bucket_size = 16,
+                                            max_seq_len = 512,
+                                            heads = 1,
+                                            lsh_dropout = 0.1,
+                                            causal = True
+                                        )
+
+        self.cq_att = qanet.CQAttention(hidden_size)
+        self.cq_resizer = qanet.Initialized_Conv1d(hidden_size * 4, hidden_size)
+        self.model_enc_blks = nn.ModuleList([reformer.Reformer(
+                                            dim = hidden_size,
+                                            depth = 1,
+                                            conv = 2,
+                                            kernel=5,
+                                            bucket_size = 16,
+                                            max_seq_len = 512,
+                                            heads = 1,
+                                            lsh_dropout = 0.1,
+                                            layer_dropout = 0.1,
+                                            causal = True
+                                        ) for _ in range(2)])
+        self.out = qanet.Pointer(hidden_size)
+
+    def forward(self, Cwid, Qwid, CQid):
+        maskC = (torch.zeros_like(Cwid) != Cwid).float()
+        maskQ = (torch.zeros_like(Qwid) != Qwid).float()
+        
+        C, Q = self.emb(Cwid), self.emb(Qwid)
+
+        Ce = self.emb_enc(C).transpose(1,2) #, maskC, 1, 1)
+        Qe = self.emb_enc(Q).transpose(1,2) #, maskQ, 1, 1)
+        
+        X = self.cq_att(Ce, Qe, maskC, maskQ)
+        M0 = self.cq_resizer(X)
+        M0 = F.dropout(M0, p=self.dropout, training=self.training).transpose(1,2) # b, l, d
+        for i, blk in enumerate(self.model_enc_blks):
+             M0 = blk(M0) 
+        M1 = M0     # b, l, d
+        for i, blk in enumerate(self.model_enc_blks):
+             M0 = blk(M0) 
+        M2 = M0     # b, l, d
+        M0 = F.dropout(M0, p=self.dropout, training=self.training)
+        for i, blk in enumerate(self.model_enc_blks):
+             M0 = blk(M0) 
+        M3 = M0     # b, l, d
+        
+        p1, p2 = self.out(M1.transpose(1,2), M2.transpose(1,2), M3.transpose(1,2), maskC)   # # b, d, l
+        
+        #print(M1.shape,M2.shape,M3.shape, p1.sum(dim=1))
+        return p1, p2

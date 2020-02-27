@@ -118,6 +118,19 @@ def collate_fn(examples):
             padded[i, :end] = seq[:end]
         return padded
 
+    def merge_1d_(arrays, dtype=torch.int64, pad_value=0, bucket = 32):
+        lengths = []
+        for a in arrays:
+            l = (a != pad_value).sum()
+            add_len = (bucket - l % bucket) if l % bucket > 0 else 0
+            lengths.append(l + add_len)
+
+        padded = torch.zeros(len(arrays), max(lengths), dtype=dtype)
+        for i, seq in enumerate(arrays):
+            end = lengths[i]
+            padded[i, :end] = seq[:end]
+        return padded
+
     def merge_2d(matrices, dtype=torch.int64, pad_value=0):
         heights = [(m.sum(1) != pad_value).sum() for m in matrices]
         widths = [(m.sum(0) != pad_value).sum() for m in matrices]
@@ -126,18 +139,20 @@ def collate_fn(examples):
             height, width = heights[i], widths[i]
             padded[i, :height, :width] = seq[:height, :width]
         return padded
-
+        
     # Group by tensor type
     context_idxs, cq_idxs, context_char_idxs, \
         question_idxs, question_char_idxs, \
         y1s, y2s, ids = zip(*examples)
 
     # Merge into batch tensors
-    context_idxs = merge_1d(context_idxs)
-    cq_idxs = merge_1d(cq_idxs)
+    
+    context_idxs = merge_1d_(context_idxs)
+    cq_idxs = merge_1d_(cq_idxs)
     context_char_idxs = merge_2d(context_char_idxs)
-    question_idxs = merge_1d(question_idxs)
+    question_idxs = merge_1d_(question_idxs)
     question_char_idxs = merge_2d(question_char_idxs)
+
     y1s = merge_0d(y1s)
     y2s = merge_0d(y2s)
     ids = merge_0d(ids)

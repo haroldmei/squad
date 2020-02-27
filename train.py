@@ -17,7 +17,7 @@ import util
 from args import get_train_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, BiDAF_Transformer, BiDAF_Reformer
+from models import BiDAF, BiDAF_Transformer, BiDAF_Reformer,BiDAF_Transformer_Ex, BiDAF_QANet
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ujson import load as json_load
@@ -54,8 +54,16 @@ def main(args):
         model = BiDAF_Transformer(word_vectors=word_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
+    elif args.name == 'transformerex':
+        model = BiDAF_Transformer_Ex(word_vectors=word_vectors,
+                  hidden_size=args.hidden_size,
+                  drop_prob=args.drop_prob)
     elif args.name == 'reformer':
         model = BiDAF_Reformer(word_vectors=word_vectors,
+                  hidden_size=args.hidden_size,
+                  drop_prob=args.drop_prob)
+    elif args.name == 'qanet':
+        model = BiDAF_QANet(word_vectors=word_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     else:
