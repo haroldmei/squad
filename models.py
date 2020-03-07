@@ -219,9 +219,10 @@ class BiDAF_Reformer(nn.Module):
                                             kernel=7,
                                             bucket_size = 16,
                                             max_seq_len = 512,
-                                            heads = 1,
+                                            heads = 4,
                                             lsh_dropout = 0.1,
-                                            causal = True
+                                            causal = True,
+                                            n_hashes = 16
                                         )
 
         self.cq_att = qanet.CQAttention(hidden_size)
@@ -230,13 +231,14 @@ class BiDAF_Reformer(nn.Module):
                                             dim = hidden_size,
                                             depth = 1,
                                             conv = 2,
-                                            kernel=5,
+                                            kernel=7,
                                             bucket_size = 16,
                                             max_seq_len = 512,
-                                            heads = 1,
+                                            heads = 8,
                                             lsh_dropout = 0.1,
                                             layer_dropout = 0.1,
-                                            causal = True
+                                            causal = True,
+                                            n_hashes = 16
                                         ) for _ in range(2)])
         self.out = qanet.Pointer(hidden_size)
 

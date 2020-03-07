@@ -300,6 +300,7 @@ class CheckpointSaver:
             metric_val (float): Determines whether checkpoint is best so far.
             device (torch.device): Device where model resides.
         """
+
         ckpt_dict = {
             'model_name': model.__class__.__name__,
             'model_state': model.cpu().state_dict(),
@@ -373,7 +374,7 @@ def get_available_devices():
     """
     gpu_ids = []
     if torch.cuda.is_available():
-        gpu_ids += [gpu_id for gpu_id in range(torch.cuda.device_count())]
+        gpu_ids += [gpu_id for gpu_id in range(1,torch.cuda.device_count())]
         device = torch.device(f'cuda:{gpu_ids[0]}')
         torch.cuda.set_device(device)
     else:
