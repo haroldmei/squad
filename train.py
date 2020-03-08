@@ -43,27 +43,28 @@ def main(args):
     # Get embeddings
     log.info('Loading embeddings...')
     word_vectors = util.torch_from_json(args.word_emb_file)
+    char_vectors = util.torch_from_json(args.char_emb_file)
 
     # Get model
     log.info('Building model...')
     if args.name == 'baseline':
-        model = BiDAF(word_vectors=word_vectors,
+        model = BiDAF(word_vectors=word_vectors, char_vectors=char_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     elif args.name == 'transformer':
-        model = BiDAF_Transformer(word_vectors=word_vectors,
+        model = BiDAF_Transformer(word_vectors=word_vectors, char_vectors=char_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     elif args.name == 'transformerex':
-        model = BiDAF_Transformer_Ex(word_vectors=word_vectors,
+        model = BiDAF_Transformer_Ex(word_vectors=word_vectors, char_vectors=char_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     elif args.name == 'reformer':
-        model = BiDAF_Reformer(word_vectors=word_vectors,
+        model = BiDAF_Reformer(word_vectors=word_vectors, char_vectors=char_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     elif args.name == 'qanet':
-        model = BiDAF_QANet(word_vectors=word_vectors,
+        model = BiDAF_QANet(word_vectors=word_vectors, char_vectors=char_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     else:
@@ -121,11 +122,13 @@ def main(args):
                 cw_idxs = cw_idxs.to(device)
                 cq_idxs = cq_idxs.to(device)
                 qw_idxs = qw_idxs.to(device)
+                cc_idxs = cc_idxs.to(device)
+                qc_idxs = qc_idxs.to(device)
                 batch_size = cw_idxs.size(0)
                 optimizer.zero_grad()
 
                 # Forward
-                log_p1, log_p2 = model(cw_idxs, qw_idxs, cq_idxs)
+                log_p1, log_p2 = model(cw_idxs, qw_idxs, cc_idxs, qc_idxs, cq_idxs)
                 y1, y2 = y1.to(device), y2.to(device)
                 loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
                 loss_val = loss.item()
@@ -191,10 +194,12 @@ def evaluate(model, data_loader, device, eval_file, max_len, use_squad_v2):
             cw_idxs = cw_idxs.to(device)
             cq_idxs = cq_idxs.to(device)
             qw_idxs = qw_idxs.to(device)
+            cc_idxs = cc_idxs.to(device)
+            qc_idxs = qc_idxs.to(device)
             batch_size = cw_idxs.size(0)
 
             # Forward
-            log_p1, log_p2 = model(cw_idxs, qw_idxs, cq_idxs)
+            log_p1, log_p2 = model(cw_idxs, qw_idxs, cc_idxs, qc_idxs, cq_idxs)
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
             nll_meter.update(loss.item(), batch_size)

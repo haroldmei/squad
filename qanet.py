@@ -68,15 +68,17 @@ class Highway(nn.Module):
     def __init__(self, layer_num: int, size, dropout=0.1):
         super().__init__()
         self.n = layer_num
+        self.dropout = dropout
         self.linear = nn.ModuleList([Initialized_Conv1d(size, size, relu=False, bias=True) for _ in range(self.n)])
         self.gate = nn.ModuleList([Initialized_Conv1d(size, size, bias=True) for _ in range(self.n)])
 
     def forward(self, x):
         #x: shape [batch_size, hidden_size, length]
         for i in range(self.n):
+            # torch.sigmoid hmei
             gate = F.sigmoid(self.gate[i](x))
             nonlinear = self.linear[i](x)
-            nonlinear = F.dropout(nonlinear, p=dropout, training=self.training)
+            nonlinear = F.dropout(nonlinear, p=self.dropout, training=self.training)
             x = gate * nonlinear + (1 - gate) * x
             #x = F.relu(x)
         return x
@@ -160,17 +162,20 @@ class SelfAttention(nn.Module):
         new_shape = old_shape[:-2] + [a * b if a and b else None]
         ret = x.contiguous().view(new_shape)
         return ret
+
 class Embedding(nn.Module):
-    def __init__(self, Dword, Dchar,dropout=0.1, dropout_char=0.1):
+    def __init__(self, Dword, Dchar, hidden_size, dropout=0.1, dropout_char=0.1):
         super().__init__()
+
         self.dropout=dropout
         self.dropout_char=dropout_char
-        self.conv2d = nn.Conv2d(Dchar, D, kernel_size = (1,5), padding=0, bias=True)
+        self.conv2d = nn.Conv2d(Dchar, hidden_size, kernel_size = (1,5), padding=0, bias=True)
         nn.init.kaiming_normal_(self.conv2d.weight, nonlinearity='relu')
-        self.conv1d = Initialized_Conv1d(Dword+D, D, bias=False)
-        self.high = Highway(2)
+        self.conv1d = Initialized_Conv1d(Dword+hidden_size, hidden_size, bias=False)
+        self.high = Highway(2, hidden_size)
 
     def forward(self, ch_emb, wd_emb):
+        
         N = ch_emb.size()[0]
         ch_emb = ch_emb.permute(0, 3, 1, 2)
         ch_emb = F.dropout(ch_emb, p=self.dropout_char, training=self.training)
@@ -181,6 +186,7 @@ class Embedding(nn.Module):
 
         wd_emb = F.dropout(wd_emb, p=self.dropout, training=self.training)
         wd_emb = wd_emb.transpose(1, 2)
+
         emb = torch.cat([ch_emb, wd_emb], dim=1)
         emb = self.conv1d(emb)
         emb = self.high(emb)

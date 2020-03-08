@@ -278,7 +278,6 @@ class ReformerEncoder(nn.Module):
             causal = False
         ).cuda()
         self.bucket_size = bucket_size
-        self.device, _ = util.get_available_devices()
 
     def forward(self, x, mask):
         x = self.reformer(x)

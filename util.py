@@ -131,13 +131,18 @@ def collate_fn(examples):
             padded[i, :end] = seq[:end]
         return padded
 
-    def merge_2d(matrices, dtype=torch.int64, pad_value=0):
+    def merge_2d(matrices, dtype=torch.int64, pad_value=0, bucket = 32):
         heights = [(m.sum(1) != pad_value).sum() for m in matrices]
+
+        l = max(heights)
+        add_len = (bucket - l % bucket) if l % bucket > 0 else 0
+
         widths = [(m.sum(0) != pad_value).sum() for m in matrices]
-        padded = torch.zeros(len(matrices), max(heights), max(widths), dtype=dtype)
+        padded = torch.zeros(len(matrices), l + add_len, max(widths), dtype=dtype)
         for i, seq in enumerate(matrices):
             height, width = heights[i], widths[i]
             padded[i, :height, :width] = seq[:height, :width]
+        
         return padded
         
     # Group by tensor type
@@ -364,8 +369,8 @@ def load_model(model, checkpoint_path, gpu_ids, return_step=True):
 
     return model
 
-
-def get_available_devices():
+# I want to use CPU sometimes.
+def get_available_devices(gpu=True):
     """Get IDs of all available GPUs.
 
     Returns:
@@ -373,8 +378,8 @@ def get_available_devices():
         gpu_ids (list): List of IDs of all GPUs that are available.
     """
     gpu_ids = []
-    if torch.cuda.is_available():
-        gpu_ids += [gpu_id for gpu_id in range(1,torch.cuda.device_count())]
+    if gpu == True and torch.cuda.is_available():
+        gpu_ids += [gpu_id for gpu_id in range(0,torch.cuda.device_count())]
         device = torch.device(f'cuda:{gpu_ids[0]}')
         torch.cuda.set_device(device)
     else:
