@@ -167,7 +167,7 @@ class BiDAF_QANet(nn.Module):
         super().__init__()
         self.dropout = drop_prob
 
-        self.char_emb = nn.Embedding.from_pretrained(torch.Tensor(char_vectors), freeze=True)
+        self.char_emb = nn.Embedding.from_pretrained(torch.Tensor(char_vectors), freeze=False)
         self.word_emb = nn.Embedding.from_pretrained(torch.Tensor(word_vectors), freeze=True)
         self.emb = qanet.Embedding(word_vectors.size(1), char_vectors.size(1), hidden_size)
         
@@ -215,7 +215,7 @@ class BiDAF_Reformer(nn.Module):
         self.dropout = drop_prob
 
         # use char embedding
-        self.char_emb = nn.Embedding.from_pretrained(torch.Tensor(char_vectors), freeze=True)
+        self.char_emb = nn.Embedding.from_pretrained(torch.Tensor(char_vectors), freeze=False)
         self.word_emb = nn.Embedding.from_pretrained(torch.Tensor(word_vectors), freeze=True)
         self.emb = qanet.Embedding(word_vectors.size(1), char_vectors.size(1), hidden_size)
 
