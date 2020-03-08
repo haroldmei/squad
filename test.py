@@ -21,7 +21,7 @@ import util
 from args import get_test_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF
+from models import BiDAF, BiDAF_Transformer, BiDAF_Reformer,BiDAF_Transformer_Ex, BiDAF_QANet
 from os.path import join
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -46,8 +46,24 @@ def main(args):
 
     # Get model
     log.info('Building model...')
-    model = BiDAF(word_vectors=word_vectors, char_vectors=char_vectors,
+    if args.name == 'baseline':
+        model = BiDAF(word_vectors=word_vectors, char_vectors=char_vectors,
                   hidden_size=args.hidden_size)
+    elif args.name == 'transformer':
+        model = BiDAF_Transformer(word_vectors=word_vectors, char_vectors=char_vectors,
+                  hidden_size=args.hidden_size)
+    elif args.name == 'transformerex':
+        model = BiDAF_Transformer_Ex(word_vectors=word_vectors, char_vectors=char_vectors,
+                  hidden_size=args.hidden_size)
+    elif args.name == 'reformer':
+        model = BiDAF_Reformer(word_vectors=word_vectors, char_vectors=char_vectors,
+                  hidden_size=args.hidden_size)
+    elif args.name == 'qanet':
+        model = BiDAF_QANet(word_vectors=word_vectors, char_vectors=char_vectors,
+                  hidden_size=args.hidden_size)
+    else:
+        exit()
+
     if use_gpu:
         model = nn.DataParallel(model, gpu_ids)
 
