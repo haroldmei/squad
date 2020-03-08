@@ -255,7 +255,7 @@ class BiDAF_Reformer(nn.Module):
         
         Cw, Cc = self.word_emb(Cwid), self.char_emb(Ccid)
         Qw, Qc = self.word_emb(Qwid), self.char_emb(Qcid)
-        C, Q = self.emb(Cc, Cw), self.emb(Qc, Qw)
+        C, Q = self.emb(Cc, Cw).transpose(1,2), self.emb(Qc, Qw).transpose(1,2)
 
         Ce = self.emb_enc(C).transpose(1,2) #, maskC, 1, 1)
         Qe = self.emb_enc(Q).transpose(1,2) #, maskQ, 1, 1)
