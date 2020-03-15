@@ -163,18 +163,20 @@ class BiDAF_Transformer_Ex(nn.Module):
         return out
 
 class BiDAF_QANet(nn.Module):
-    def __init__(self, word_vectors, char_vectors, hidden_size, drop_prob=0.1):
+    def __init__(self, word_vectors, char_vectors, hidden_size, drop_prob=0.1, lsh_attention=False):
         super().__init__()
         self.dropout = drop_prob
+        self.lsh = lsh_attention
 
         self.char_emb = nn.Embedding.from_pretrained(torch.Tensor(char_vectors), freeze=False)
         self.word_emb = nn.Embedding.from_pretrained(torch.Tensor(word_vectors), freeze=True)
         self.emb = qanet.Embedding(word_vectors.size(1), char_vectors.size(1), hidden_size)
         
-        self.emb_enc = qanet.EncoderBlock(conv_num=4, ch_num=hidden_size, k=7, dropout=drop_prob)
+        self.emb_enc = qanet.EncoderBlock(conv_num=4, ch_num=hidden_size, k=7, dropout=drop_prob, lsh_attention=lsh_attention)
+
         self.cq_att = qanet.CQAttention(hidden_size)
         self.cq_resizer = qanet.Initialized_Conv1d(hidden_size * 4, hidden_size)
-        self.model_enc_blks = nn.ModuleList([qanet.EncoderBlock(conv_num=2, ch_num=hidden_size, k=5, dropout=drop_prob) for _ in range(7)])
+        self.model_enc_blks = nn.ModuleList([qanet.EncoderBlock(conv_num=2, ch_num=hidden_size, k=5, dropout=drop_prob, lsh_attention=lsh_attention) for _ in range(7)])
         self.out = qanet.Pointer(hidden_size)
 
     def forward(self, Cwid, Qwid, Ccid, Qcid, CQid):
@@ -186,23 +188,22 @@ class BiDAF_QANet(nn.Module):
 
         C = self.emb(Cc, Cw)#.transpose(1,2)
         Q = self.emb(Qc, Qw)#.transpose(1,2)
-        #print("3", C.shape, Q.shape)
 
-        Ce = self.emb_enc(C, maskC, 1, 1)
-        Qe = self.emb_enc(Q, maskQ, 1, 1)
+        Ce = self.emb_enc(C, None if self.lsh else maskC, 1, 1)
+        Qe = self.emb_enc(Q, None if self.lsh else maskQ, 1, 1)
         
         X = self.cq_att(Ce, Qe, maskC, maskQ)
         M0 = self.cq_resizer(X)
         M0 = F.dropout(M0, p=self.dropout, training=self.training)
         for i, blk in enumerate(self.model_enc_blks):
-             M0 = blk(M0, maskC, i*(2+2)+1, 7)
+             M0 = blk(M0, None if self.lsh else maskC, i*(2+2)+1, 7)
         M1 = M0
         for i, blk in enumerate(self.model_enc_blks):
-             M0 = blk(M0, maskC, i*(2+2)+1, 7)
+             M0 = blk(M0, None if self.lsh else maskC, i*(2+2)+1, 7)
         M2 = M0
         M0 = F.dropout(M0, p=self.dropout, training=self.training)
         for i, blk in enumerate(self.model_enc_blks):
-             M0 = blk(M0, maskC, i*(2+2)+1, 7)
+             M0 = blk(M0, None if self.lsh else maskC, i*(2+2)+1, 7)
         M3 = M0
         p1, p2 = self.out(M1, M2, M3, maskC) # b, d, l
         

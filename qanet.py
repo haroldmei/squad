@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 import util
+
+import reformer
 #D = config.connector_dim
 #Nh = config.num_heads
 #Dword = config.glove_dim
@@ -12,7 +14,6 @@ import util
 
 #Lc = config.para_limit
 #Lq = config.ques_limit
-
 
 def mask_logits(inputs, mask):
     mask = mask.type(torch.float32)
@@ -187,6 +188,7 @@ class Embedding(nn.Module):
         wd_emb = F.dropout(wd_emb, p=self.dropout, training=self.training)
         wd_emb = wd_emb.transpose(1, 2)
 
+        print(ch_emb.shape, wd_emb.shape)
         emb = torch.cat([ch_emb, wd_emb], dim=1)
         emb = self.conv1d(emb)
         emb = self.high(emb)
@@ -194,17 +196,24 @@ class Embedding(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, conv_num: int, ch_num: int, k: int, dropout: float):
+    def __init__(self, conv_num: int, ch_num: int, k: int, dropout: float, lsh_attention = False):
         super().__init__()
         self.dropout = dropout
         self.convs = nn.ModuleList([DepthwiseSeparableConv(ch_num, ch_num, k) for _ in range(conv_num)])
-        self.self_att = SelfAttention(ch_num)
+        self.lsh_attention = lsh_attention
+        if lsh_attention:
+            self.self_att = reformer.LSHSelfAttention(ch_num, bucket_size=16)
+        else:
+            self.self_att = SelfAttention(ch_num)
+
         self.FFN_1 = Initialized_Conv1d(ch_num, ch_num, relu=True, bias=True)
         self.FFN_2 = Initialized_Conv1d(ch_num, ch_num, bias=True)
         self.norm_C = nn.ModuleList([nn.LayerNorm(ch_num) for _ in range(conv_num)])
         self.norm_1 = nn.LayerNorm(ch_num)
         self.norm_2 = nn.LayerNorm(ch_num)
         self.conv_num = conv_num
+
+        
     def forward(self, x, mask, l, blks):
         total_layers = (self.conv_num+1)*blks
         out = PosEncoder(x)
@@ -219,7 +228,12 @@ class EncoderBlock(nn.Module):
         res = out
         out = self.norm_1(out.transpose(1,2)).transpose(1,2)
         out = F.dropout(out, p=self.dropout, training=self.training)
-        out = self.self_att(out, mask)
+
+        if self.lsh_attention:
+            out = self.self_att(out.transpose(1,2), mask).transpose(1,2)
+        else:
+            out = self.self_att(out, mask)
+
         out = self.layer_dropout(out, res, self.dropout*float(l)/total_layers)
         l += 1
         res = out

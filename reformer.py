@@ -462,6 +462,7 @@ class LSHSelfAttention(nn.Module):
         use_full_attn = self.use_full_attn or kv_len <= self.full_attn_thres
 
         x = torch.cat((x, mem, keys), dim=1)
+        #print(x.shape)
         qk = self.toqk(x)
         v = self.tov(x)
 

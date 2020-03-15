@@ -67,6 +67,10 @@ def main(args):
         model = BiDAF_QANet(word_vectors=word_vectors, char_vectors=char_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
+    elif args.name == 'qanetex':
+        model = BiDAF_QANet(word_vectors=word_vectors, char_vectors=char_vectors,
+                  hidden_size=args.hidden_size,
+                  drop_prob=args.drop_prob, lsh_attention=True)
     else:
         exit()
 
